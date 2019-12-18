@@ -8,7 +8,7 @@
 static PyModuleDef memoryModule = {
     PyModuleDef_HEAD_INIT,
     .m_name = "memory",
-    .m_doc = "Blatant Cheat Engine ripoff.",
+    .m_doc = "foreign process memory processing module",
     .m_size = -1,
 };
 

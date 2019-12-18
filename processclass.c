@@ -4,7 +4,9 @@
 #define PY_SSIZE_T_CLEAN
 #endif
 
+//process_vm_read and process_vm_write
 #include <sys/uio.h>
+
 #include <Python.h>
 #include "structmember.h"
 #include <stdio.h>
@@ -52,8 +54,8 @@ static PyObject *Process_read(
     PyObject *args
 ) {
     void *base;
-    ssize_t read;
     int size;
+    ssize_t read;
     
     int success = PyArg_ParseTuple(args, "Ki",
         &base, &size
@@ -91,9 +93,9 @@ static PyObject *Process_write(
     PyObject *args
 ) {
     void *base;
-    ssize_t written;
-    int size;
     const char *buffer_ptr;
+    int size;
+    ssize_t written;
     
     int success = PyArg_ParseTuple(args, "Ky#",
         &base, &buffer_ptr, &size
@@ -135,14 +137,21 @@ static PyObject *Process_scan(
 
     if (nLen != mLen) {
         PyErr_SetString(PyExc_ValueError,
-            "NEEDLE and MASK must be the same size."
+            "'needle' and 'mask' must be of the same size."
+        );
+        return NULL;
+    }
+
+    if (nLen <= 0) {
+        PyErr_SetString(PyExc_ValueError,
+            "'needle' must not be empty."
         );
         return NULL;
     }
 
     if (hLen < nLen) {
         PyErr_SetString(PyExc_ValueError,
-            "NEEDLE is too big."
+            "'needle' must be smaller than the haystack."
         );
         return NULL;
     }
@@ -162,6 +171,21 @@ static PyObject *Process_scan(
 }
 
 
+/*
+This is an example of Google style.
+
+Args:
+    param1: This is the first param.
+    param2: This is a second param.
+
+Returns:
+    This is a description of what is returned.
+
+Raises:
+    KeyError: Raises an exception.
+*/
+
+
 // Keeps track of the class' methods
 // https://docs.python.org/3/c-api/structures.html
 static PyMethodDef Process_methods[] = {
@@ -169,19 +193,51 @@ static PyMethodDef Process_methods[] = {
         "read",
         (PyCFunction) Process_read,
         METH_VARARGS,
-        "Gets bytes from base to base+size of process pid"
+        "Reads bytes from the process and returns them.\n"
+        "\nArgs:\n"
+        "    (int) base_addr: of the chunk of memory to be read.\n"
+        "    (int) size: of the chunk of memory to be read, in bytes.\n"
+        "\nReturns:\n"
+        "    A tuple, containing the number of bytes read, as an int, and a\n"
+        "    bytes object, which holds the actual data read.\n"
+        "\nRaises:\n"
+        "    OSError: raised if the operation fails."
     },
     {
         "write",
         (PyCFunction) Process_write,
         METH_VARARGS,
-        "writes 'bytes' obj to 'pid', from 'base'."
+        "Writes bytes to the memory of the process.\n"
+        "\nArgs:\n"
+        "    (int) base_addr: of the chunk of memory to be overwritten.\n"
+        "    (bytes) data: which will be written.\n"
+        "\nReturns:\n"
+        "    The number of bytes written, as an int.\n"
+        "\nRaises:\n"
+        "    OSError: Raised if the operation fails."
     },
     {
         "scan",
         (PyCFunction) Process_scan,
         METH_VARARGS,
-        "finds patterns in memory and returns their addr."
+        "Searches an address range of the process' memory space for a pattern\n"
+        "and returns the address corresponding to the beggining of the match.\n"
+        "\nArgs:\n"
+        "    (int) base_addr: of the chunk of memory to be searched (haystack).\n"
+        "    (int) size: of the chunk of memory to be searched, in bytes.\n"
+        "    (bytes) needle: the pattern to be matched against.\n"
+        "    (bytes) mask: this parameter tells how the bytes from 'needle'\n"
+        "        should be matched. Null bytes here make bytes on the\n"
+        "        corresponding position on 'needle' be ignored, while any\n"
+        "        other values make them be compared as usual (==). 'mask' and\n"
+        "        'needle' must have the same length.\n"
+        "\nReturns:\n"
+        "    The memory address at which the memory matches 'needle', as int.\n"
+        "\nRaises:\n"
+        "    ValueError: if the sizes of 'needle' and 'mask' aren't the same;\n"
+        "        if 'needle' is an empty bytes object or if 'needle' is\n"
+        "        bigger than the haystack.\n"
+        "    LookupError: if a match is not found."
     },
     {NULL}  /* Sentinel */
 };

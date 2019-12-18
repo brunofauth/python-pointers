@@ -37,7 +37,7 @@ char *memmemmask(
     printf("hp: %p\n", haystack);
     printf("got to here\n");
     printf("pointer + 1: %p\n", hp + 1);
-    printf("pointer + 2: %p\n", hp + 2);
+    printf("pointer + 2: %p\n", hp + 2);//aq da segfault tentando ler a stack da cobaia
     printf("*(pointer): %c\n", *haystack);
     printf("*(pointer + 3): %c\n", *(hp + 3));
     

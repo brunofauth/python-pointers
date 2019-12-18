@@ -1,2 +1,4 @@
+#! /usr/bin/env sh
+
 rm -rf build
 python setup.py build && sudo python setup.py install
