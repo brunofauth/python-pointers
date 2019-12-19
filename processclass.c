@@ -11,8 +11,11 @@
 #include "structmember.h"
 #include <stdio.h>
 
+#include "memsegmgenclass.c"
 
-#include "memmemmask.c"
+
+#ifndef PROCESSCLASS_C
+#define PROCESSCLASS_C
 
 
 // Declares the class' fields' C representation (storage)
@@ -119,56 +122,16 @@ static PyObject *Process_write(
     return Py_BuildValue("n", (Py_ssize_t) written);
 }
 
-/*self, base: int, size: int, needle: bytes, mask: bytes*/
+
+// Class' scan method
 static PyObject *Process_scan(
     ProcessObject *self,
     PyObject *args
 ) {
-    void *base, *match;
-    char *needle, *mask;
-    int hLen, nLen, mLen;
-
-    int success = PyArg_ParseTuple(args, "Kiy#y#",
-        &base, &hLen, &needle, &nLen, &mask, &mLen
-    );
-
-    if (!success)
-        return NULL;
-
-    if (nLen != mLen) {
-        PyErr_SetString(PyExc_ValueError,
-            "'needle' and 'mask' must be of the same size."
-        );
-        return NULL;
-    }
-
-    if (nLen <= 0) {
-        PyErr_SetString(PyExc_ValueError,
-            "'needle' must not be empty."
-        );
-        return NULL;
-    }
-
-    if (hLen < nLen) {
-        PyErr_SetString(PyExc_ValueError,
-            "'needle' must be smaller than the haystack."
-        );
-        return NULL;
-    }
-
-    match = (void *) memmemmask(
-        base, hLen, needle, mask, nLen
-    );
-
-    if (match == NULL) {
-        PyErr_SetString(PyExc_LookupError,
-            "NEEDLE not found."
-        );
-        return NULL;
-    }
-
-    return PyLong_FromVoidPtr(match);
+    MemorySegmentGenerator *msg = ()
+    return Py_BuildValue("O", )
 }
+
 
 
 /*
@@ -220,24 +183,16 @@ static PyMethodDef Process_methods[] = {
         "scan",
         (PyCFunction) Process_scan,
         METH_VARARGS,
-        "Searches an address range of the process' memory space for a pattern\n"
-        "and returns the address corresponding to the beggining of the match.\n"
+        "Returns a MemorySegmentGenerator object.\n"
         "\nArgs:\n"
         "    (int) base_addr: of the chunk of memory to be searched (haystack).\n"
-        "    (int) size: of the chunk of memory to be searched, in bytes.\n"
+        "    (int) size: of the haystack, in bytes.\n"
         "    (bytes) needle: the pattern to be matched against.\n"
-        "    (bytes) mask: this parameter tells how the bytes from 'needle'\n"
-        "        should be matched. Null bytes here make bytes on the\n"
-        "        corresponding position on 'needle' be ignored, while any\n"
-        "        other values make them be compared as usual (==). 'mask' and\n"
-        "        'needle' must have the same length.\n"
+        "    (bytes) mask: must have the same length as 'needle'. Null bytes\n"
+        "        in this sequence make the corresponding byte from the needle\n"
+        "        to be ignored when matching the pattern."
         "\nReturns:\n"
-        "    The memory address at which the memory matches 'needle', as int.\n"
-        "\nRaises:\n"
-        "    ValueError: if the sizes of 'needle' and 'mask' aren't the same;\n"
-        "        if 'needle' is an empty bytes object or if 'needle' is\n"
-        "        bigger than the haystack.\n"
-        "    LookupError: if a match is not found."
+        "    MemorySegmentGenerator instance, to be iterated.\n"
     },
     {NULL}  /* Sentinel */
 };
@@ -257,3 +212,7 @@ static PyTypeObject ProcessType = {
     .tp_methods = Process_methods // ,
     //.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE
 };
+
+
+#endif
+

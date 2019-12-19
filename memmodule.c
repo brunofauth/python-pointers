@@ -1,8 +1,12 @@
 #include <Python.h>
 #include "structmember.h"
 
-
 #include "processclass.c"
+#include "memsegmgenclass.c"
+
+
+#ifndef MEMMODULE_C
+#define MEMMODULE_C
 
 
 static PyModuleDef memoryModule = {
@@ -15,11 +19,13 @@ static PyModuleDef memoryModule = {
 
 PyMODINIT_FUNC PyInit_memory(void) {
 
-    PyObject *m;
     if (PyType_Ready(&ProcessType) < 0)
         return NULL;
 
-    m = PyModule_Create(&memoryModule);
+    if (PyType_Ready(&MemorySegmentGeneratorType) < 0)
+        return NULL;
+
+    PyObject *m = PyModule_Create(&memoryModule);
     if (m == NULL)
         return NULL;
 
@@ -30,5 +36,16 @@ PyMODINIT_FUNC PyInit_memory(void) {
         (PyObject *) &ProcessType
     );
 
+    Py_INCREF(&MemorySegmentGeneratorType);
+    PyModule_AddObject(
+        m,
+        "MemorySegmentGenerator",
+        (PyObject *) &MemorySegmentGeneratorType
+    );
+
     return m;
 }
+
+
+#endif
+
