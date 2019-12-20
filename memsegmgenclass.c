@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 
 //process_vm_readv
 #include <sys/uio.h>
@@ -17,14 +18,14 @@ typedef struct {
     long long pid;
     char *haystackBase;
     Py_ssize_t haystackLen;
-    PyObject * needle;
+    Py_buffer * needle;
     char *needleBase;
     Py_ssize_t needleLen;
-    PyObject * mask;
+    Py_buffer * mask;
     char *maskBase;
     Py_ssize_t maskLen;
     char *buffer;
-    Py_ssize_t offset = 0;
+    Py_ssize_t offset;
 } MemorySegmentGeneratorObject;
 
 
@@ -40,7 +41,7 @@ static PyMemberDef MemorySegmentGenerator_members[] = {
     {
         "base_addr",
         T_ULONGLONG,
-        offsetof(MemorySegmentGeneratorObject, haystack),
+        offsetof(MemorySegmentGeneratorObject, haystackBase),
         READONLY,
         "An int, holding the base address of the haystack."
     },
@@ -82,12 +83,17 @@ static PyObject * MemorySegmentGenerator_new(
     PyObject *args,
     PyObject *kwds
 ) {
+    printf("NEWING PROCESS\n");
+
     MemorySegmentGeneratorObject *self;
     self = (MemorySegmentGeneratorObject *) type->tp_alloc(type, 0);
     if (self == NULL)
         return PyErr_NoMemory();
 
+    printf("ALLOCKED OBJECT\n");
+
     static char *kwlist[] = {
+        "pid",
         "base_addr",
         "size",
         "needle",
@@ -96,54 +102,70 @@ static PyObject * MemorySegmentGenerator_new(
     };
 
     int resUnpParams = PyArg_ParseTupleAndKeywords(
-        args, kwds, "Lkny#y#", kwlist,
-        &self->pid,
-        &self->haystackBase,
-        &self->haystackLen,
-        &self->needle,
-        &self->mask);
+        args, kwds, "Lkny*y*", kwlist,
+        &(self->pid),
+        &(self->haystackBase),
+        &(self->haystackLen),
+        &(self->needle),
+        &(self->mask));
     if (!resUnpParams)
         return NULL;
 
-    self->haystackCurr = self->haystackBase;
+    printf("unpacked params\n");
+    //  sudo catchsegv python
 
     int resUnpNeedle = PyBytes_AsStringAndSize(
-        needle, &needleBase, &needleLen);
+        (PyObject *) self->needle,
+        &(self->needleBase),
+        &(self->needleLen));
     if (resUnpNeedle == -1)
         return NULL;
 
     int resUnpMask = PyBytes_AsStringAndSize(
-        mask, &maskBase, &maskLen);
+        (PyObject *) self->mask,
+        &(self->maskBase),
+        &(self->maskLen));
     if (resUnpMask == -1)
         return NULL;
 
-    if (needleLen != maskLen) {
+    printf("converted strings\n");
+
+    if (self->needleLen != self->maskLen) {
         PyErr_SetString(PyExc_ValueError,
             "'needle' and 'mask' must be of the same size.");
         return NULL;
     }
 
-    if (needleLen <= 0) {
+    if (self->needleLen <= 0) {
         PyErr_SetString(PyExc_ValueError,
             "'needle' must not be empty.");
         return NULL;
     }
 
-    if (haystackLen < needleLen) {
+    if (self->haystackLen < self->needleLen) {
         PyErr_SetString(PyExc_ValueError,
             "'needle' must be smaller than the haystack.");
         return NULL;
     }
 
-    buffer = (char *) PyMem_RawMalloc(haystackLen);
-    if (buffer == NULL)
+    printf("sanity checked\n");
+    printf("ALLOCKING\n");
+
+    self->buffer = (char *) PyMem_RawMalloc(self->haystackLen);
+    if (self->buffer == NULL)
         return PyErr_NoMemory();
 
-    struct iovec l = {(void *) buffer, (size_t) haystackLen};
-    struct iovec r = {haystackBase, (size_t) haystackLen};
+    printf("BOUTTA COPY\n");
+
+    struct iovec l = {(void *) self->buffer, (size_t) self->haystackLen};
+    struct iovec r = {self->haystackBase, (size_t) self->haystackLen};
     ssize_t read = process_vm_readv(
         (pid_t) self->pid, &l, 1, &r, 1, 0
     );
+
+    printf("COPIED LOL\n");
+
+    self->offset = 0;
 
     return (PyObject *) self;
 }
@@ -164,11 +186,14 @@ int memmemmask(char *mem1, char *mem2, char *mask, int len) {
 static PyObject * MemorySegmentGenerator_iternext(
     MemorySegmentGeneratorObject *self
 ) {
-    for (int i = self->offset; i < self->haystackLen - self->needleLen + 1; i++) {
-        if (memmemmask(buffer + i, needleBase, maskBase, maskLen)) {
-            self->offset = i + 1;
+    for (; self->offset < self->haystackLen - self->needleLen + 1; self->offset++) {
+        if (memmemmask(self->buffer + self->offset, self->needleBase, self->maskBase, self->maskLen)) {
             // Does it leak memory? I don't know!
-            return Py_BuildValue("k", self->haystackBase + i);
+            PyObject *ret = Py_BuildValue(
+                "k", self->haystackBase + self->offset
+            );
+            self->offset += 1;
+            return ret;
         }
     }
     return NULL; // raises StopIteration.
@@ -234,7 +259,7 @@ static PyTypeObject MemorySegmentGeneratorType = {
     .tp_flags = Py_TPFLAGS_DEFAULT,
     .tp_new = (newfunc) MemorySegmentGenerator_new,
     .tp_iter = PyObject_SelfIter,
-    .tp_iternext = MemorySegmentGenerator_iternext,
+    .tp_iternext = (iternextfunc) MemorySegmentGenerator_iternext,
     .tp_dealloc = (destructor) MemorySegmentGenerator_dealloc,
     .tp_members = MemorySegmentGenerator_members,
     .tp_methods = MemorySegmentGenerator_methods

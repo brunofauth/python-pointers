@@ -46,7 +46,7 @@ static int Process_init(
 ) {
     static char *kwlist[] = {"pid", NULL}; 
     return !PyArg_ParseTupleAndKeywords(
-        args, kwds, "I", kwlist, &self->pid
+        args, kwds, "I", kwlist, &(self->pid)
     );
 }
 
@@ -96,7 +96,7 @@ static PyObject *Process_write(
     PyObject *args
 ) {
     void *base;
-    const char *buffer_ptr;
+    char *buffer_ptr;
     int size;
     ssize_t written;
     
@@ -126,10 +126,49 @@ static PyObject *Process_write(
 // Class' scan method
 static PyObject *Process_scan(
     ProcessObject *self,
-    PyObject *args
+    PyObject *args,
+    PyObject *kwds
 ) {
-    MemorySegmentGenerator *msg = ()
-    return Py_BuildValue("O", )
+    char *haystackBase;
+    Py_ssize_t haystackLen;
+    char *needle;
+    int needleLen;
+    char *mask;
+    int maskLen;
+
+    static char *kwlist[] = {
+        "base_addr",
+        "size",
+        "needle",
+        "mask",
+        NULL
+    };
+
+    int resUnpParams = PyArg_ParseTupleAndKeywords(
+        args, kwds, "kny#y#", kwlist,
+        &haystackBase,
+        &haystackLen,
+        &needle,
+        &needleLen,
+        &mask,
+        &maskLen);
+    if (!resUnpParams)
+        return NULL;
+
+    PyObject *params = Py_BuildValue(
+         "Lkny#y#",
+         self->pid,
+         haystackBase,
+         haystackLen,
+         needle,
+         needleLen,
+         mask,
+         maskLen);
+    if (params == NULL)
+        return NULL;
+
+    return PyObject_CallObject(
+        (PyObject *) &MemorySegmentGeneratorType, params);
 }
 
 
@@ -181,8 +220,8 @@ static PyMethodDef Process_methods[] = {
     },
     {
         "scan",
-        (PyCFunction) Process_scan,
-        METH_VARARGS,
+        (PyCFunctionWithKeywords) Process_scan,
+        METH_VARARGS | METH_KEYWORDS,
         "Returns a MemorySegmentGenerator object.\n"
         "\nArgs:\n"
         "    (int) base_addr: of the chunk of memory to be searched (haystack).\n"
@@ -210,7 +249,6 @@ static PyTypeObject ProcessType = {
     .tp_init = (initproc) Process_init,
     .tp_members = Process_members,
     .tp_methods = Process_methods // ,
-    //.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE
 };
 
 
