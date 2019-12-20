@@ -1,5 +1,4 @@
 #include <stdlib.h>
-#include <stdio.h>
 
 //process_vm_readv
 #include <sys/uio.h>
@@ -76,21 +75,17 @@ static PyMemberDef MemorySegmentGenerator_members[] = {
 // https://docs.python.org/3/extending/newtypes_tutorial.html
 // "Unlike the tp_new handler, there is no guarantee that tp_init
 // is called at all and it can also be called multiple times."
-// Thus we use __new__ for initializing this object.
-// (missing ref counting tho)
+// Thus we use __new__ for initializing this object, as it is
+// supposed to be immutable (missing ref counting tho).
 static PyObject * MemorySegmentGenerator_new(
     PyTypeObject *type,
     PyObject *args,
     PyObject *kwds
 ) {
-    printf("NEWING PROCESS\n");
-
     MemorySegmentGeneratorObject *self;
     self = (MemorySegmentGeneratorObject *) type->tp_alloc(type, 0);
     if (self == NULL)
         return PyErr_NoMemory();
-
-    printf("ALLOCKED OBJECT\n");
 
     static char *kwlist[] = {
         "pid",
@@ -101,34 +96,52 @@ static PyObject * MemorySegmentGenerator_new(
         NULL
     };
 
+    // https://docs.python.org/3/c-api/bytes.html#c.PyBytes_AsStringAndSize
+    // The bits commented here would've been used had
+    // PyBytes_AsStringAndSize not segfaulted.
     int resUnpParams = PyArg_ParseTupleAndKeywords(
-        args, kwds, "Lkny*y*", kwlist,
+        // args, kwds, "Lkny*y*", kwlist,
+        args, kwds, "Lkny#y#", kwlist,
         &(self->pid),
         &(self->haystackBase),
         &(self->haystackLen),
-        &(self->needle),
-        &(self->mask));
+        // &(self->needle),
+        &(self->needleBase),
+        &(self->needleLen),
+        // &(self->mask));
+        &(self->maskBase),
+        &(self->maskLen));
     if (!resUnpParams)
         return NULL;
 
-    printf("unpacked params\n");
-    //  sudo catchsegv python
 
-    int resUnpNeedle = PyBytes_AsStringAndSize(
-        (PyObject *) self->needle,
-        &(self->needleBase),
-        &(self->needleLen));
-    if (resUnpNeedle == -1)
+    // CANT USE THIS BC PyBytes_AsStringAndSize SEGFAULTS
+    // int resUnpNeedle = PyBytes_AsStringAndSize(
+    //     (PyObject *) self->needle,
+    //     &(self->needleBase),
+    //     &(self->needleLen));
+    // if (resUnpNeedle == -1)
+    //     return NULL;
+
+    self->needle = (Py_buffer *) PyBytes_FromStringAndSize(
+        self->needleBase,
+        self->needleLen);
+    if (self->needle == NULL)
         return NULL;
 
-    int resUnpMask = PyBytes_AsStringAndSize(
-        (PyObject *) self->mask,
-        &(self->maskBase),
-        &(self->maskLen));
-    if (resUnpMask == -1)
-        return NULL;
+    // CANT USE THIS BC PyBytes_AsStringAndSize SEGFAULTS
+    // int resUnpMask = PyBytes_AsStringAndSize(
+    //     (PyObject *) self->mask,
+    //     &(self->maskBase),
+    //     &(self->maskLen));
+    // if (resUnpMask == -1)
+    //     return NULL;
 
-    printf("converted strings\n");
+    self->mask = (Py_buffer *) PyBytes_FromStringAndSize(
+        self->maskBase,
+        self->maskLen);
+    if (self->mask == NULL)
+        return NULL;
 
     if (self->needleLen != self->maskLen) {
         PyErr_SetString(PyExc_ValueError,
@@ -148,22 +161,15 @@ static PyObject * MemorySegmentGenerator_new(
         return NULL;
     }
 
-    printf("sanity checked\n");
-    printf("ALLOCKING\n");
-
     self->buffer = (char *) PyMem_RawMalloc(self->haystackLen);
     if (self->buffer == NULL)
         return PyErr_NoMemory();
-
-    printf("BOUTTA COPY\n");
 
     struct iovec l = {(void *) self->buffer, (size_t) self->haystackLen};
     struct iovec r = {self->haystackBase, (size_t) self->haystackLen};
     ssize_t read = process_vm_readv(
         (pid_t) self->pid, &l, 1, &r, 1, 0
     );
-
-    printf("COPIED LOL\n");
 
     self->offset = 0;
 
@@ -214,24 +220,13 @@ static void MemorySegmentGenerator_dealloc(
 // Keeps track of the class' methods
 // https://docs.python.org/3/c-api/structures.html
 static PyMethodDef MemorySegmentGenerator_methods[] = {
-    /*{
-        "write",
-        (PyCFunction) Process_write,
-        METH_VARARGS,
-        "Writes bytes to the memory of the process.\n"
-        "\nArgs:\n"
-        "    (int) base_addr: of the chunk of memory to be overwritten.\n"
-        "    (bytes) data: which will be written.\n"
-        "\nReturns:\n"
-        "    The number of bytes written, as an int.\n"
-        "\nRaises:\n"
-        "    OSError: Raised if the operation fails."
-    },*/
+    // {name, funcpointer, funcsignature, docstring},
     {NULL}  /* Sentinel */
 };
 
 
 // Defines the class' properties
+// https://docs.python.org/3/c-api/typeobj.html#c.PyTypeObject.tp_alloc
 static PyTypeObject MemorySegmentGeneratorType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "memory.MemorySegmentGenerator",

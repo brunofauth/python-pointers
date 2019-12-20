@@ -9,7 +9,6 @@
 
 #include <Python.h>
 #include "structmember.h"
-#include <stdio.h>
 
 #include "memsegmgenclass.c"
 
@@ -238,6 +237,7 @@ static PyMethodDef Process_methods[] = {
 
 
 // Defines the class' properties
+// https://docs.python.org/3/c-api/typeobj.html#c.PyTypeObject.tp_alloc
 static PyTypeObject ProcessType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "memory.Process",
